@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
@@ -28,9 +29,10 @@ var downloadlogfile *os.File
 var faileddownloadlogfile *os.File
 var channelID string = "607148922057785344"
 var count int = 0
+var wg sync.WaitGroup
 
 func main() {
-	var wg sync.WaitGroup
+	start := time.Now()
 	os.Mkdir("cards", 0644)
 	downloadlogfile, _ = os.Create("cards/downloadlog.json")
 	faileddownloadlogfile, _ = os.Create("cards/faileddownloadlog.json")
@@ -44,23 +46,24 @@ func main() {
 		return
 	}
 	wg.Add(1)
-	go gotillast(dg, firstid, "", &wg)
+	go gotillast(dg, firstid, "")
 	wg.Wait()
 	fmt.Println("end!!!")
 	downloadlogfile.WriteString("]")
 	downloadlogfile.Close()
 	faileddownloadlogfile.WriteString("]")
 	faileddownloadlogfile.Close()
+	fmt.Println("take:", time.Since(start))
 }
 
-func readmsg(message *discordgo.Message, wg *sync.WaitGroup) {
-	var wgc sync.WaitGroup
+func readmsg(message *discordgo.Message) {
+
 	downloaded := false
 	for _, att := range message.Attachments {
 		if att.Width == 252 && att.Height == 352 {
 			fmt.Println("i react now download", message.Author.Username, message.ID, message.Attachments)
-			wgc.Add(1)
-			go downloadcard(att, message.ChannelID, message.ID, message.Author.Username+"#"+message.Author.Discriminator, &wgc)
+			wg.Add(1)
+			go downloadcard(att, message.ChannelID, message.ID, message.Author.Username+"#"+message.Author.Discriminator)
 			downloaded = true
 		}
 	}
@@ -76,11 +79,11 @@ func readmsg(message *discordgo.Message, wg *sync.WaitGroup) {
 		faileddownloadlogfile.WriteString(",")
 		//lockfilefaillog.Unlock()
 	}
-	wgc.Wait()
+
 	wg.Done()
 }
 
-func downloadcard(att *discordgo.MessageAttachment, channelID string, messageID string, author string, wgc *sync.WaitGroup) {
+func downloadcard(att *discordgo.MessageAttachment, channelID string, messageID string, author string) {
 	res, err := http.Get(att.URL)
 	fmt.Println("download", att.Filename, "from", author)
 	if err != nil {
@@ -104,10 +107,10 @@ func downloadcard(att *discordgo.MessageAttachment, channelID string, messageID 
 	downloadlogfile.Write(file)
 	downloadlogfile.WriteString(",")
 	//lockfile.Unlock()
-	wgc.Done()
+	wg.Done()
 }
 
-func gotillast(dg *discordgo.Session, firstid string, currentid string, wg *sync.WaitGroup) {
+func gotillast(dg *discordgo.Session, firstid string, currentid string) {
 	messages, err := dg.ChannelMessages(channelID, 0, currentid, "", "")
 	if len(messages) == 0 {
 		fmt.Println("done id:", currentid)
@@ -121,18 +124,18 @@ func gotillast(dg *discordgo.Session, firstid string, currentid string, wg *sync
 	if messages[0].ID != firstid {
 		currentid = messages[len(messages)-1].ID
 		wg.Add(1)
-		go gotillast(dg, firstid, currentid, wg)
+		go gotillast(dg, firstid, currentid)
 		for _, message := range messages {
 			if check := ireact(message); check {
 				wg.Add(1)
-				go readmsg(message, wg)
+				go readmsg(message)
 			}
 		}
 	} else {
 		for _, message := range messages {
 			if check := ireact(message); check {
 				wg.Add(1)
-				go readmsg(message, wg)
+				go readmsg(message)
 			}
 		}
 	}
@@ -140,11 +143,14 @@ func gotillast(dg *discordgo.Session, firstid string, currentid string, wg *sync
 }
 
 func ireact(message *discordgo.Message) bool {
+	//ch := make(chan bool)
 	for _, react := range message.Reactions {
 		if react.Me {
 			return true
 		}
+		// go reactme(react,ch)
 	}
+	// isreacted := <-ch
 	return false
 }
 
@@ -157,6 +163,13 @@ func cheakandcreatedir(path string) {
 		}
 		return
 	}
+}
+
+func reactme(react *discordgo.MessageReactions, ch chan bool) {
+	if react.Me {
+		ch <- react.Me
+	}
+	return
 }
 
 //mutex lock everything inside function
