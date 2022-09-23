@@ -26,8 +26,6 @@ type Faillog struct {
 
 var downloadlogfile *os.File
 var faileddownloadlogfile *os.File
-var lockfile sync.Mutex
-var lockfilefaillog sync.Mutex
 var channelID string = "607148922057785344"
 var count int = 0
 
@@ -70,16 +68,16 @@ func readmsg(message *discordgo.Message, wg *sync.WaitGroup) {
 		log := Faillog{
 			message.Author.Username + "#" + message.Author.Discriminator,
 			message.Content,
-			"discord.com/channels/" + "446784086539763712" + "/" + message.ChannelID + "/" + message.ID,
+			"https://" + "discord.com/channels/" + "446784086539763712" + "/" + message.ChannelID + "/" + message.ID,
 		}
 		file, _ := json.MarshalIndent(log, "", " ")
-		lockfilefaillog.Lock()
+		//lockfilefaillog.Lock()
 		faileddownloadlogfile.Write(file)
 		faileddownloadlogfile.WriteString(",")
-		defer lockfilefaillog.Unlock()
+		//lockfilefaillog.Unlock()
 	}
 	wgc.Wait()
-	defer wg.Done()
+	wg.Done()
 }
 
 func downloadcard(att *discordgo.MessageAttachment, channelID string, messageID string, author string, wgc *sync.WaitGroup) {
@@ -99,14 +97,14 @@ func downloadcard(att *discordgo.MessageAttachment, channelID string, messageID 
 	log := Downloadlog{
 		att.Filename,
 		author,
-		"discord.com/channels/" + "446784086539763712" + "/" + channelID + "/" + messageID,
+		"https://" + "discord.com/channels/" + "446784086539763712" + "/" + channelID + "/" + messageID,
 	}
 	file, _ := json.MarshalIndent(log, "", " ")
-	lockfile.Lock()
+	//lockfile.Lock()
 	downloadlogfile.Write(file)
 	downloadlogfile.WriteString(",")
-	defer lockfile.Unlock()
-	defer wgc.Done()
+	//lockfile.Unlock()
+	wgc.Done()
 }
 
 func gotillast(dg *discordgo.Session, firstid string, currentid string, wg *sync.WaitGroup) {
@@ -138,7 +136,7 @@ func gotillast(dg *discordgo.Session, firstid string, currentid string, wg *sync
 			}
 		}
 	}
-	defer wg.Done()
+	wg.Done()
 }
 
 func ireact(message *discordgo.Message) bool {
@@ -160,3 +158,5 @@ func cheakandcreatedir(path string) {
 		return
 	}
 }
+
+//mutex lock everything inside function
